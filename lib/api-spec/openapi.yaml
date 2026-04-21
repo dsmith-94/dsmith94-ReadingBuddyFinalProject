@@ -1,0 +1,329 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Reading Buddy API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+  - name: books
+  - name: sessions
+  - name: goals
+  - name: stats
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /books:
+    get:
+      operationId: listBooks
+      tags: [books]
+      summary: List all books
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [reading, completed, all]
+            default: all
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Book"
+    post:
+      operationId: createBook
+      tags: [books]
+      summary: Add a new book
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewBookInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+  /books/{id}:
+    get:
+      operationId: getBook
+      tags: [books]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookDetail"
+    patch:
+      operationId: updateBook
+      tags: [books]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BookUpdateInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+    delete:
+      operationId: deleteBook
+      tags: [books]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List recent reading sessions
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: bookId
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Log a reading session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewSessionInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /goals:
+    get:
+      operationId: getGoals
+      tags: [goals]
+      summary: Get reading goals (per-book ETA table)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GoalRow"
+
+  /stats/summary:
+    get:
+      operationId: getStatsSummary
+      tags: [stats]
+      summary: Reading dashboard summary
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsSummary"
+
+  /stats/daily:
+    get:
+      operationId: getDailyStats
+      tags: [stats]
+      summary: Pages read per day for last N days
+      parameters:
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 14
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DailyStat"
+
+  /stats/streak:
+    get:
+      operationId: getStreak
+      tags: [stats]
+      summary: Current and longest reading streak
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreakResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status: { type: string }
+      required: [status]
+    OkResponse:
+      type: object
+      properties:
+        ok: { type: boolean }
+      required: [ok]
+    Book:
+      type: object
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        author: { type: string, nullable: true }
+        genre: { type: string, nullable: true }
+        totalPages: { type: integer }
+        pagesRead: { type: integer }
+        targetCompletionDate: { type: string, nullable: true, description: "YYYY-MM-DD" }
+        completedAt: { type: string, nullable: true }
+        createdAt: { type: string }
+      required: [id, title, totalPages, pagesRead, createdAt]
+    BookDetail:
+      type: object
+      properties:
+        book:
+          $ref: "#/components/schemas/Book"
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+      required: [book, sessions]
+    NewBookInput:
+      type: object
+      properties:
+        title: { type: string }
+        author: { type: string, nullable: true }
+        genre: { type: string, nullable: true }
+        totalPages: { type: integer, minimum: 1 }
+        targetCompletionDate: { type: string, nullable: true }
+      required: [title, totalPages]
+    BookUpdateInput:
+      type: object
+      properties:
+        title: { type: string }
+        author: { type: string, nullable: true }
+        genre: { type: string, nullable: true }
+        totalPages: { type: integer, minimum: 1 }
+        targetCompletionDate: { type: string, nullable: true }
+    Session:
+      type: object
+      properties:
+        id: { type: integer }
+        bookId: { type: integer }
+        bookTitle: { type: string }
+        pagesRead: { type: integer }
+        notes: { type: string, nullable: true }
+        loggedAt: { type: string }
+      required: [id, bookId, bookTitle, pagesRead, loggedAt]
+    NewSessionInput:
+      type: object
+      properties:
+        bookId: { type: integer }
+        pagesRead: { type: integer, minimum: 1 }
+        notes: { type: string, nullable: true }
+      required: [bookId, pagesRead]
+    GoalRow:
+      type: object
+      properties:
+        bookId: { type: integer }
+        bookTitle: { type: string }
+        pagesCompleted: { type: integer }
+        totalPages: { type: integer }
+        estimatedDateCompleted: { type: string, nullable: true }
+        avgPagesPerDay: { type: number }
+      required: [bookId, bookTitle, pagesCompleted, totalPages, avgPagesPerDay]
+    StatsSummary:
+      type: object
+      properties:
+        totalPagesRead: { type: integer }
+        booksCompleted: { type: integer }
+        booksInProgress: { type: integer }
+        sessionsLogged: { type: integer }
+        pagesToday: { type: integer }
+        pagesThisWeek: { type: integer }
+        avgPagesPerDay: { type: number }
+      required: [totalPagesRead, booksCompleted, booksInProgress, sessionsLogged, pagesToday, pagesThisWeek, avgPagesPerDay]
+    DailyStat:
+      type: object
+      properties:
+        date: { type: string }
+        pages: { type: integer }
+      required: [date, pages]
+    StreakResponse:
+      type: object
+      properties:
+        currentStreak: { type: integer }
+        longestStreak: { type: integer }
+      required: [currentStreak, longestStreak]

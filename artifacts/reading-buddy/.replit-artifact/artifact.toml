@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Reading Buddy"
+version = "1.0.0"
+id = "artifacts/reading-buddy"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22240
+
+[services.development]
+run = "pnpm --filter @workspace/reading-buddy run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/reading-buddy", "run", "build" ]
+publicDir = "artifacts/reading-buddy/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22240"
+BASE_PATH = "/"
