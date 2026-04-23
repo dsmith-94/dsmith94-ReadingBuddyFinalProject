@@ -1,179 +1,80 @@
-# Deploying Reading Buddy to Azure App Service
+1. Create the Supabase project
+Go to supabase.com and sign in (free tier is fine).
+Click New project.
+Pick your organization, name the project (e.g. reading-buddy), and set a strong database password — write it down, you'll need it shortly.
+Pick a region close to where the app will run (e.g. East US if you're deploying to Azure East US).
+Click Create new project and wait ~2 minutes for it to provision.
+2. Grab the connection string
+In your Supabase project dashboard, click the Connect button at the top (or go to Project Settings → Database).
+Find Connection string and choose the URI tab.
+You'll see a few connection options:
+Session pooler (port 5432) — use this for migrations and any long-lived server like an Azure App Service.
+Transaction pooler (port 6543) — meant for serverless / very short-lived connections. We don't need this.
+Copy the Session pooler URI. It looks like:
+postgresql://postgres.xxxxxxxxxxxx:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:5432/postgres
 
-This guide walks through exporting Reading Buddy from Replit, pushing it to
-GitHub, and deploying it as a single **Azure App Service** (Linux + Node 20)
-backed by **Azure Database for PostgreSQL — Flexible Server**.
+Replace [YOUR-PASSWORD] with the password you set in step 1.
+Keep this string handy — it's your DATABASE_URL.
 
-The Express API and the React frontend are deployed together as one service.
+3. Push the schema to Supabase
+From your local machine, with the project cloned and pnpm install already run:
 
----
-
-## 1. Get the code into GitHub
-
-You can do this two ways.
-
-### Option A — Connect Replit to GitHub directly
-
-1. In your Replit project, open the **Version control** pane (left sidebar).
-2. Click **Create a Git repository** if it isn't already a repo.
-3. Click **Connect to GitHub** and authorize Replit.
-4. Choose the GitHub account/org and pick a name (e.g. `reading-buddy`).
-5. Click **Create repository on GitHub** and **Push**.
-
-### Option B — Download a zip and upload via GitHub Desktop
-
-1. In the Replit file tree, click the three-dot menu → **Download as zip**.
-2. On github.com, create a new empty repository called `reading-buddy`.
-3. Open GitHub Desktop → **File → Clone repository** → pick the new repo.
-4. Unzip the Replit download into the cloned folder (overwrite the empty
-   repo's `.git`-less files).
-5. In GitHub Desktop, commit "Initial import from Replit" and **Push origin**.
-
-> Add a `.gitignore` if one doesn't exist. At minimum exclude `node_modules`,
-> `dist`, `azure-dist`, and `.env`.
-
----
-
-## 2. Provision the Azure resources
-
-You need three things in Azure:
-
-| Resource | Tier suggestion | Purpose |
-|---|---|---|
-| Resource Group | — | Container for the others |
-| Azure Database for PostgreSQL — Flexible Server | Burstable B1ms (cheapest) | The database |
-| App Service (Linux, Node 20 LTS) | F1 Free or B1 | Runs the Express server (and serves the React build) |
-
-### 2a. Create the database
-
-1. Azure Portal → **Create a resource** → **Azure Database for PostgreSQL** →
-   **Flexible server**.
-2. Server name: `reading-buddy-db` (must be globally unique).
-3. PostgreSQL version: 16. Region: same one you'll use for App Service.
-4. Authentication method: **PostgreSQL authentication only**. Set an admin
-   user and password — save them.
-5. Networking: **Public access**. Add your client IP, and check
-   **Allow public access from any Azure service** (so App Service can connect).
-6. Create the server. Once it's up, open the server → **Databases** → create a
-   new database called `reading_buddy`.
-7. Build your connection string:
-   ```
-   postgres://USER:PASSWORD@reading-buddy-db.postgres.database.azure.com:5432/reading_buddy?sslmode=require
-   ```
-
-### 2b. Create the App Service
-
-1. Azure Portal → **Create a resource** → **Web App**.
-2. Name: `reading-buddy` (becomes `reading-buddy.azurewebsites.net`).
-3. Publish: **Code**. Runtime: **Node 20 LTS**. OS: **Linux**.
-4. Region: same as the database.
-5. Pricing: F1 (free) is fine to start; upgrade to B1 if you hit limits.
-6. Create the Web App.
-
----
-
-## 3. Wire the App Service to your GitHub repo
-
-1. Open the App Service → **Deployment Center** (left menu).
-2. Source: **GitHub**. Authorize and pick your repo + the `main` branch.
-3. Build provider: **GitHub Actions** (default).
-4. Azure generates a workflow file (`.github/workflows/main_reading-buddy.yml`)
-   in your repo. Let it run once — it will likely fail the first build.
-5. Replace the generated workflow's build step so it uses pnpm and our
-   Azure build script. The "Build and deploy" job should look like this:
-
-   ```yaml
-   - uses: actions/checkout@v4
-   - uses: actions/setup-node@v4
-     with: { node-version: '20.x' }
-   - uses: pnpm/action-setup@v4
-     with: { version: 10 }
-   - run: pnpm install --frozen-lockfile
-   - run: pnpm run build:azure
-   - uses: actions/upload-artifact@v4
-     with:
-       name: node-app
-       path: azure-dist
-   ```
-
-   And the deploy job should download `node-app` and deploy that folder
-   (instead of the repo root) to App Service.
-
-6. Commit the edited workflow file. The next push triggers a deploy.
-
----
-
-## 4. Configure App Service settings
-
-In the App Service → **Settings → Environment variables**, add:
-
-| Name | Value |
-|---|---|
-| `DATABASE_URL` | The Postgres connection string from step 2a |
-| `STATIC_DIR` | `./public` |
-| `NODE_ENV` | `production` |
-
-> Don't set `PORT` — Azure provides it automatically.
-
-In **Settings → Configuration → General settings**:
-
-- **Startup Command**: `node --enable-source-maps index.mjs`
-
-Click **Save** and let the app restart.
-
----
-
-## 5. Initialize the database schema
-
-The first time only, you need to push the Drizzle schema to Azure Postgres.
-From your local machine (with Node 20 + pnpm installed and the repo cloned):
-
-```bash
-pnpm install
-DATABASE_URL='postgres://...your azure connection string...' \
+DATABASE_URL='postgresql://postgres.xxx:YOURPASSWORD@aws-0-us-east-1.pooler.supabase.com:5432/postgres' \
   pnpm --filter @workspace/db run db:push
-```
 
-This creates the `books` and `reading_sessions` tables on the Azure DB.
+This creates the books and reading_sessions tables in Supabase. You can confirm in Supabase → Table Editor.
 
 (Optional) Seed sample books:
 
-```bash
-DATABASE_URL='postgres://...' pnpm --filter @workspace/db run db:seed
-```
+DATABASE_URL='postgresql://postgres.xxx:YOURPASSWORD@...:5432/postgres' \
+  pnpm --filter @workspace/db run db:seed
 
----
+4. (Optional) Use Supabase in Replit too
+If you want your Replit dev environment to use Supabase as well (instead of Replit's built-in Postgres):
 
-## 6. Verify it's running
+Open the Secrets pane in Replit (left sidebar, padlock icon).
+Edit the existing DATABASE_URL secret and paste the Supabase connection string.
+Restart the API Server workflow.
+You can also skip this and keep Replit on its built-in Postgres for development — both are fine.
 
-Visit `https://reading-buddy.azurewebsites.net`. You should see:
+5. Tell Azure App Service to use Supabase
+When configuring your App Service:
 
-- The landing page at `/`
-- The full app at `/app`
-- API responses at `/api/books`, `/api/stats/summary`, etc.
+Open the App Service in the Azure Portal.
+Go to Settings → Environment variables.
+Set DATABASE_URL to the Supabase connection string (instead of an Azure Postgres one).
+Save and let the app restart.
+The App Service will now read and write to Supabase.
 
-If something's off, check **App Service → Log stream** for errors.
+If you're following AZURE_DEPLOYMENT.md, this means you can skip section 2a ("Create the database") entirely. Use Supabase for steps 4 and 5 of that guide instead.
 
----
+Notes on Supabase
+SSL is required. Supabase enforces it. The connection URI works as-is; no extra flags are needed.
+The free tier auto-pauses projects after about a week of inactivity. Just visit the dashboard to wake it up.
+Don't enable Row Level Security (RLS) on the books and reading_sessions tables for this project. Reading Buddy connects with the database admin role and doesn't use Supabase Auth, so RLS would block your queries. (RLS becomes useful only if you later add per-user accounts through Supabase Auth.)
+You won't use the Supabase JavaScript SDK. The app talks directly to Postgres through Drizzle, which keeps the code portable and means switching databases is just a matter of changing DATABASE_URL.
+Troubleshooting
+password authentication failed — the [YOUR-PASSWORD] placeholder in the connection string wasn't replaced, or the password is wrong. Reset it under Project Settings → Database → Reset database password.
+could not translate host name — the connection string was copied incompletely. Re-copy the full URI from the Supabase Connect dialog.
+relation "books" does not exist — you skipped step 3. Run pnpm --filter @workspace/db run db:push against your Supabase URL.
+Queries hang or time out from Azure — make sure you used the Session pooler URI (port 5432), not the direct connection.
+Add guide for using Supabase as the project database
 
-## What changed in the codebase to support this
 
-- `artifacts/api-server/src/app.ts` now serves static files and falls back to
-  `index.html` for non-API routes when the `STATIC_DIR` env var is set. In
-  Replit dev this var is unset, so behavior there is unchanged.
-- `scripts/build-azure.mjs` produces a self-contained `azure-dist/` folder
-  containing the bundled API (`index.mjs`), the React build (`public/`), and
-  a minimal `package.json` with a `start` script. This is what App Service
-  deploys.
-- `package.json` exposes `pnpm run build:azure` as the single command that
-  produces the deployable.
 
-You can build and test locally before deploying:
+wireframe_projects_1776798565848.pdf
 
-```bash
-pnpm run build:azure
-cd azure-dist
-STATIC_DIR=./public PORT=3000 \
-  DATABASE_URL='postgres://...' node index.mjs
-# open http://localhost:3000
-```
+dsmith94_storyboard_1776798577780.html
+
+dsmith94_sitemap_1776798589291.docx
+
+dsmith94_Vibecode_prompt_1776798660697.pdf
+I want you to help me create a website that will run on microsoft azure, I want a website that is all about logging daily reading goals and shows stats about it called Reading Buddy. I will feed you some documents to help you get an idea.
+
+2 days ago
+
+13 messages & 59 actions
+
+Presented output
+Reading Buddy
+Website
