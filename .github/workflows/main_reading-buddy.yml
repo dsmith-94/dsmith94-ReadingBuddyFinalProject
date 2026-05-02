@@ -66,5 +66,5 @@ jobs:
         with:
           app-name: 'reading-buddy'
           slot-name: 'Production'
-          package: ./azure-dist
+          package: .
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_E2038D3C85B3449A96D2B3926B339D5F }}
